@@ -1,0 +1,20 @@
+#!/bin/bash
+
+cnt=0
+retry_count=5
+
+while true
+  do
+  (( cnt = "$cnt" + 1 ))
+  MOUNT_STATUS=`mount -a > /dev/null 2>&1; echo $?`
+  if [ "$MOUNT_STATUS" = "0" ]; then
+    break
+  fi
+  if [ "$cnt" = "$retry_count" ]; then
+      echo "'mount -a' command failed."
+      break
+  fi
+  sleep 10
+done
+
+exit 0

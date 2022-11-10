@@ -1,0 +1,14 @@
+*.tfstate
+*.tfstate.*backup
+*.tfstate.lock.info
+
+.terraform.*
+
+kolla-ansible/
+
+hosts_compute
+fstab_compute
+
+multinode
+
+log.out

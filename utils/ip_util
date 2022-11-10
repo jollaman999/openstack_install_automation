@@ -1,0 +1,188 @@
+# Usage: find_ip_from_iface [IFACE] [IP]
+# Return: 0 if found IP from iface, 1 otherwise
+find_ip_from_iface() {
+  NODE_IPS_WITH_CIDR=`ip addr | grep $1 | awk '{ print $2 }' | grep -v $1`
+  STATUS=`echo $?`
+  if [ $STATUS != "0" ]; then
+    return 1
+  fi
+
+  for IP_CIDR in ${NODE_IPS_WITH_CIDR[@]}; do
+    IP=`echo $IP_CIDR | cut -d'/' -f1`
+    if [ "$IP" = "$2" ]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+# Usage: get_cidr_from_iface_ip [IFACE] [IP]
+# Return: CIDR if found IP from iface, 1 otherwise
+get_cidr_from_iface_ip() {
+  IP=`ip addr | grep $1 | awk '{ print $2 }' | grep -v $1 | grep $2`
+  STATUS=`echo $?`
+  if [ $STATUS != "0" ]; then
+    return 1
+  fi
+  CIDR=`echo $IP | cut -d'/' -f2`
+
+  return $CIDR
+}
+
+# Usage: cidr2mask [CIDR]
+cidr2mask() {
+  if [ "$1" -lt "0" ] || [ "$1" -gt "32" ]; then
+    echo "[!] Wrong CIDR! Must be in range 1~32."
+    return 1
+  fi
+
+  local i mask=""
+  local full_octets=$(($1/8))
+  local partial_octet=$(($1%8))
+
+  for ((i=0;i<4;i+=1)); do
+    if [ $i -lt $full_octets ]; then
+      mask+=255
+    elif [ $i -eq $full_octets ]; then
+      mask+=$((256 - 2**(8-$partial_octet)))
+    else
+      mask+=0
+    fi
+    test $i -lt 3 && mask+=.
+  done
+
+  echo $mask
+
+  return 0
+}
+
+# Usage: check_ip [IP]
+# Return: 0 if valid, 1 otherwise
+check_ip() {
+  IP_SPLITED=(`echo $1 | tr "." "\n"`)
+  if [ "${#IP_SPLITED[@]}" != "4" ]; then
+    return 1
+  fi
+
+  for split in ${IP_SPLITED[@]}; do
+    if [ "$split" -lt "0" ] || [ "$split" -gt "255" ]; then
+      return 1
+    fi
+  done
+
+  return 0
+}
+
+# Usage: get_network_address [IP] [Prefix Length]
+# Return: 1 - Wrong prefix length, 2 - Invalid IP
+get_network_address() {
+  MASK=`cidr2mask $2`
+  STATUS=`echo $?`
+  if [ $STATUS = "1" ]; then
+    return 1
+  fi
+
+  check_ip $1
+  STATUS=`echo $?`
+  if [ $STATUS != 0 ]; then
+    return 2
+  fi
+
+  IP_SPLITED=(`echo $1 | tr "." "\n"`)
+  IP1=${IP_SPLITED[0]}
+  IP2=${IP_SPLITED[1]}
+  IP3=${IP_SPLITED[2]}
+  IP4=${IP_SPLITED[3]}
+
+  MASK_SPLITED=(`echo $MASK | tr "." "\n"`)
+  NET1=$(($IP1 & ${MASK_SPLITED[0]}))
+  NET2=$(($IP2 & ${MASK_SPLITED[1]}))
+  NET3=$(($IP3 & ${MASK_SPLITED[2]}))
+  NET4=$(($IP4 & ${MASK_SPLITED[3]}))
+
+  echo "$NET1.$NET2.$NET3.$NET4"
+
+  return 0
+}
+
+# Usage: get_first_ip [IP] [Prefix Length]
+# Return: 1 - Wrong prefix length, 2 - Invalid IP
+get_first_ip() {
+  if [ "$2" -lt "0" ] || [ "$2" -gt "30" ]; then
+    echo "[!] Wrong CIDR! Must be in range 1~30."
+    return 1
+  fi
+
+  MASK=`cidr2mask $2`
+  STATUS=`echo $?`
+  if [ $STATUS = "1" ]; then
+    return 1
+  fi
+
+  NETWORK_IP=`get_network_address $1 $2`
+  STATUS=`echo $?`
+  if [ $STATUS = "2" ]; then
+    return 2
+  fi
+
+  NETWORK_IP_SPLITED=(`echo $1 | tr "." "\n"`)
+  NETWORK_IP1=${NETWORK_IP_SPLITED[0]}
+  NETWORK_IP2=${NETWORK_IP_SPLITED[1]}
+  NETWORK_IP3=${NETWORK_IP_SPLITED[2]}
+  NETWORK_IP4=${NETWORK_IP_SPLITED[3]}
+
+  MASK_SPLITED=(`echo $MASK | tr "." "\n"`)
+  NET1=$(($NETWORK_IP1 & ${MASK_SPLITED[0]}))
+  NET2=$(($NETWORK_IP2 & ${MASK_SPLITED[1]}))
+  NET3=$(($NETWORK_IP3 & ${MASK_SPLITED[2]}))
+  NET4=$((($NETWORK_IP4 & ${MASK_SPLITED[3]}) + 1))
+
+  echo "$NET1.$NET2.$NET3.$NET4"
+
+  return 0
+}
+
+# Usage: get_last_ip [IP] [Prefix Length]
+# Return: 1 - Wrong prefix length, 2 - Invalid IP
+get_last_ip() {
+  if [ "$2" -lt "0" ] || [ "$2" -gt "30" ]; then
+    echo "[!] Wrong CIDR! Must be in range 1~30."
+    return 1
+  fi
+
+  MASK=`cidr2mask $2`
+  STATUS=`echo $?`
+  if [ $STATUS = "1" ]; then
+    return 1
+  fi
+
+  NETWORK_IP=`get_network_address $1 $2`
+  STATUS=`echo $?`
+  if [ $STATUS = "2" ]; then
+    return 2
+  fi
+
+  NETWORK_IP_SPLITED=(`echo $1 | tr "." "\n"`)
+  NETWORK_IP1=${NETWORK_IP_SPLITED[0]}
+  NETWORK_IP2=${NETWORK_IP_SPLITED[1]}
+  NETWORK_IP3=${NETWORK_IP_SPLITED[2]}
+  NETWORK_IP4=${NETWORK_IP_SPLITED[3]}
+
+  MASK_SPLITED=(`echo $MASK | tr "." "\n"`)
+  WILDCARD_MASK_NET1=$((255 - ${MASK_SPLITED[0]}))
+  WILDCARD_MASK_NET2=$((255 - ${MASK_SPLITED[1]}))
+  WILDCARD_MASK_NET3=$((255 - ${MASK_SPLITED[2]}))
+  WILDCARD_MASK_NET4=$((255 - ${MASK_SPLITED[3]}))
+
+  WILDCARD_MASK="$WILDCARD_MASK_NET1.$WILDCARD_MASK_NET2.$WILDCARD_MASK_NET3.$WILDCARD_MASK_NET4"
+  WILDCARD_MASK_SPLITED=(`echo $WILDCARD_MASK | tr "." "\n"`)
+  NET1=$(($NETWORK_IP1 | ${WILDCARD_MASK_SPLITED[0]}))
+  NET2=$(($NETWORK_IP2 | ${WILDCARD_MASK_SPLITED[1]}))
+  NET3=$(($NETWORK_IP3 | ${WILDCARD_MASK_SPLITED[2]}))
+  NET4=$((($NETWORK_IP4 | ${WILDCARD_MASK_SPLITED[3]}) - 1))
+
+  echo "$NET1.$NET2.$NET3.$NET4"
+
+  return 0
+}
