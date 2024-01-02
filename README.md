@@ -15,7 +15,7 @@
     - NIC 2개
         - External: 외부 통신용 1개
         - Internal: 내부 통신용 1개
-    - OS: Ubuntu 20.04 LTS
+    - OS: Ubuntu 22.04 LTS
     - Kernel: 4.15+, IPv6 Enable, KVM Enabled
     - Python 3.6.x~3.7.x
     - SSH Server Installed
