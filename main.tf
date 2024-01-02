@@ -2,12 +2,6 @@
 # common
 ##########################################
 locals {
-    hosts_ips = toset(
-        [
-            "${var.controller_node_internal_ip_address}",
-            "${var.compute_node_internal_ip_address}"
-        ])
-
     # OpenStack Temp Directory
     openstack_tmp_dir = "/root/openstack_tmp"
 
@@ -58,12 +52,6 @@ resource "null_resource" "iscsi_clone_zfs_volumes" {
             "if [ $STATUS != \"0\" ]; then",
             "  echo \"Failed to clone controller node's os volume!\"",
             "  exit 1",
-            "fi",
-            "zfs clone ${var.iscsi_os_volume_snapshot_name_compute_node} ${var.iscsi_os_volume_clone_name_compute_node}",
-            "STATUS=`echo $?`",
-            "if [ $STATUS != \"0\" ]; then",
-            "  echo \"Failed to clone compute node's os volume!\"",
-            "  exit 1",
             "fi"
         ]
     }
@@ -106,15 +94,6 @@ resource "null_resource" "iscsi_configure_ctld" {
             "    lun 0 {",
             "        path /dev/zvol/${var.iscsi_os_volume_clone_name_controller_node}",
             "        size ${var.iscsi_os_volume_size_controller_node}",
-            "    }",
-            "}",
-            "' >> /etc/ctl.conf",
-            "echo -n 'target ${var.iscsi_os_volume_target_name_compute_node} {",
-            "    auth-group no-authentication",
-            "    portal-group '\"$PORTAL_GROUP\"'",
-            "    lun 0 {",
-            "        path /dev/zvol/${var.iscsi_os_volume_clone_name_compute_node}",
-            "        size ${var.iscsi_os_volume_size_compute_node}",
             "    }",
             "}",
             "' >> /etc/ctl.conf",
@@ -234,9 +213,6 @@ resource "null_resource" "dhcpd_set_config" {
             "sed -i 's@DHCPD_CONTROLLER_MAC_ADDRESS@'\"${var.dhcp_mac_address_controller_node}\"'@g' $OPENSTACK_DHCPD_CONFIG_FILE",
             "sed -i 's@DHCPD_CONTROLLER_INTERNAL_IP@'\"${var.controller_node_internal_ip_address}\"'@g' $OPENSTACK_DHCPD_CONFIG_FILE",
             "sed -i 's@DHCPD_PXE_PATH_CONTROLLER@'\"${local.dhcp_pxe_file_path_controller}\"'@g' $OPENSTACK_DHCPD_CONFIG_FILE",
-            "sed -i 's@DHCPD_COMPUTE_MAC_ADDRESS@'\"${var.dhcp_mac_address_compute_node}\"'@g' $OPENSTACK_DHCPD_CONFIG_FILE",
-            "sed -i 's@DHCPD_COMPUTE_INTERNAL_IP@'\"${var.compute_node_internal_ip_address}\"'@g' $OPENSTACK_DHCPD_CONFIG_FILE",
-            "sed -i 's@DHCPD_PXE_PATH_COMPUTE@'\"${local.dhcp_pxe_file_path_compute}\"'@g' $OPENSTACK_DHCPD_CONFIG_FILE",
             "service isc-dhcp-server restart"
         ]
     }
@@ -326,43 +302,12 @@ resource "null_resource" "dhcpd_tftp_server_create_pxe_config_controller_node" {
     }
 }
 
-resource "null_resource" "dhcpd_tftp_server_create_pxe_config_compute_node" {
-    depends_on = [
-        null_resource.dhcpd_tftp_server_create_pxe_config_controller_node
-    ]
-
-    for_each = {for key, val in local.dhcp_tftp_server_ip_address:
-               key => val if var.enable_infra_configuration == true}
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.dhcp_tftp_server_ssh_root_password
-        host     = each.key
-    }
-
-    provisioner "file" {
-        source      = "${path.root}/pxe/default"
-        destination = "${local.dhcp_pxe_config_file_path_compute}"
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
-            "PXE_CONFIG_FILE_COMPUTE=\"${local.dhcp_pxe_config_file_path_compute}\"",
-            "sed -i '' 's/OPENSTACK_AUTO_INSTALL_ISCSI_TARGET_NAME/'\"${var.iscsi_os_volume_target_name_compute_node}\"'/g' $PXE_CONFIG_FILE_COMPUTE",
-            "sed -i '' 's/OPENSTACK_AUTO_INSTALL_ISCSI_TARGET_IP/'\"${var.iscsi_server_ip_address}\"'/g' $PXE_CONFIG_FILE_COMPUTE",
-            "sed -i '' 's/OPENSTACK_AUTO_INSTALL_ISCSI_OS_VOLUME_ROOT_UUID/'\"${var.iscsi_os_volume_root_uuid_compute_node}\"'/g' $PXE_CONFIG_FILE_COMPUTE"
-        ]
-    }
-}
-
 ##########################################
 # IPMI
 ##########################################
 resource "null_resource" "ipmi_install_ipmitool" {
     depends_on = [
-        null_resource.dhcpd_tftp_server_create_pxe_config_compute_node
+        null_resource.dhcpd_tftp_server_create_pxe_config_controller_node
     ]
 
     provisioner "local-exec" {
@@ -402,25 +347,6 @@ resource "null_resource" "ipmi_controller_node_off" {
   }
 }
 
-resource "null_resource" "ipmi_compute_node_off" {
-    depends_on = [
-        null_resource.ipmi_install_ipmitool
-    ]
-
-    provisioner "local-exec" {
-        command = <<-EOT
-        /bin/bash -c '
-        ENABLE_INFRA_CONFIGURATION=`echo "${var.enable_infra_configuration}" | tr '[:upper:]' '[:lower:]'`
-        if [ "$ENABLE_INFRA_CONFIGURATION" = "false" ]; then
-          exit 0
-        fi
-        ipmitool -A PASSWORD -U ${var.ipmi_user_name_compute_node} -P ${var.ipmi_user_password_compute_node} -I lan -H ${var.ipmi_ip_address_compute_node} power off > /dev/null 2>&1
-        sleep ${local.ipmi_node_wait_power_off_seconds}
-        '
-        EOT
-  }
-}
-
 resource "null_resource" "ipmi_controller_node_set_bootdev_pxe" {
     depends_on = [
         null_resource.ipmi_controller_node_off
@@ -439,27 +365,9 @@ resource "null_resource" "ipmi_controller_node_set_bootdev_pxe" {
   }
 }
 
-resource "null_resource" "ipmi_compute_node_set_bootdev_pxe" {
-    depends_on = [
-        null_resource.ipmi_compute_node_off
-    ]
-
-    provisioner "local-exec" {
-        command = <<-EOT
-        /bin/bash -c '
-        ENABLE_INFRA_CONFIGURATION=`echo "${var.enable_infra_configuration}" | tr '[:upper:]' '[:lower:]'`
-        if [ "$ENABLE_INFRA_CONFIGURATION" = "false" ]; then
-          exit 0
-        fi
-        ipmitool -A PASSWORD -U ${var.ipmi_user_name_compute_node} -P ${var.ipmi_user_password_compute_node} -I lan -H ${var.ipmi_ip_address_compute_node} chassis bootparam set bootflag force_pxe 
-        '
-        EOT
-  }
-}
-
 resource "null_resource" "ipmi_controller_node_on" {
     depends_on = [
-        null_resource.ipmi_compute_node_set_bootdev_pxe
+        null_resource.ipmi_controller_node_set_bootdev_pxe
     ]
 
     provisioner "local-exec" {
@@ -475,28 +383,9 @@ resource "null_resource" "ipmi_controller_node_on" {
   }
 }
 
-resource "null_resource" "ipmi_compute_node_on" {
-    depends_on = [
-        null_resource.ipmi_compute_node_set_bootdev_pxe
-    ]
-
-    provisioner "local-exec" {
-        command = <<-EOT
-        /bin/bash -c '
-        ENABLE_INFRA_CONFIGURATION=`echo "${var.enable_infra_configuration}" | tr '[:upper:]' '[:lower:]'`
-        if [ "$ENABLE_INFRA_CONFIGURATION" = "false" ]; then
-          exit 0
-        fi
-        ipmitool -A PASSWORD -U ${var.ipmi_user_name_compute_node} -P ${var.ipmi_user_password_compute_node} -I lan -H ${var.ipmi_ip_address_compute_node} power on
-        '
-        EOT
-  }
-}
-
 resource "null_resource" "ipmi_install_telnet" {
     depends_on = [
-        null_resource.ipmi_controller_node_on,
-        null_resource.ipmi_compute_node_on
+        null_resource.ipmi_controller_node_on
     ]
 
     provisioner "local-exec" {
@@ -541,60 +430,29 @@ resource "null_resource" "ipmi_wait_controller_node" {
   }
 }
 
-resource "null_resource" "ipmi_wait_compute_node" {
-    depends_on = [
-        null_resource.ipmi_install_telnet
-    ]
-
-    provisioner "local-exec" {
-        command = <<-EOT
-        /bin/bash -c '
-        echo "[*] Waiting for SSH connection of compute node..."
-        cnt=0
-        while :
-        do
-           cnt=`expr $cnt + 1`
-           echo -e "\x1dclose\x0d" | telnet ${var.compute_node_internal_ip_address} 22
-           CONTROLLER_NODE_CONNECTION_STATUS=`echo $?`
-           if [ "$CONTROLLER_NODE_CONNECTION_STATUS" = "0" ]; then
-              break
-           fi
-           if [ "$cnt" = "${local.node_connection_check_retry_counts}" ]; then
-              echo "Failed to connect to compute node!"
-              exit 1
-           fi
-           sleep ${local.node_connection_check_retry_interval_seconds}
-        done'
-        EOT
-  }
-}
-
 ##########################################
 # pre-check
 ##########################################
 resource "null_resource" "pre_check_os" {
     depends_on = [
-        null_resource.ipmi_wait_controller_node,
-        null_resource.ipmi_wait_compute_node
+        null_resource.ipmi_wait_controller_node
     ]
-
-    for_each = local.hosts_ips
 
     connection {
         type     = "ssh"
         user     = "root"
         password = var.openstack_nodes_ssh_root_password
-        host     = each.key
+        host     = var.controller_node_internal_ip_address
     }
 
     provisioner "remote-exec" {
         inline = [
             "#!/bin/bash",
             "CHECK_OS_ID=`lsb_release -i | grep -i \"ubuntu\" > /dev/null 2>&1 ; echo $?`",
-            "CHECK_OS_RELEASE=`lsb_release -r | grep -i \"20.04\" > /dev/null 2>&1 ; echo $?`",
+            "CHECK_OS_RELEASE=`lsb_release -r | grep -i \"22.04\" > /dev/null 2>&1 ; echo $?`",
             "echo \"[*] Checking OS version...\"",
             "if [ $CHECK_OS_ID != \"0\" ] || [ $CHECK_OS_RELEASE != \"0\" ]; then",
-            "  echo \"[!] This script only supports Ubuntu 20.04.\"",
+            "  echo \"[!] This script only supports Ubuntu 22.04.\"",
             "  exit 1",
             "fi"
         ]
@@ -606,13 +464,11 @@ resource "null_resource" "pre_check_ipv6" {
         null_resource.pre_check_os
     ]
 
-    for_each = local.hosts_ips
-
     connection {
         type     = "ssh"
         user     = "root"
         password = var.openstack_nodes_ssh_root_password
-        host     = each.key
+        host     = var.controller_node_internal_ip_address
     }
 
     provisioner "remote-exec" {
@@ -628,7 +484,7 @@ resource "null_resource" "pre_check_ipv6" {
     }
 }
 
-resource "null_resource" "pre_check_compute_kvm" {
+resource "null_resource" "pre_check_controller_kvm" {
     depends_on = [
         null_resource.pre_check_ipv6
     ]
@@ -637,7 +493,7 @@ resource "null_resource" "pre_check_compute_kvm" {
         type     = "ssh"
         user     = "root"
         password = var.openstack_nodes_ssh_root_password
-        host     = var.compute_node_internal_ip_address
+        host     = var.controller_node_internal_ip_address
     }
 
     provisioner "remote-exec" {
@@ -654,9 +510,9 @@ resource "null_resource" "pre_check_compute_kvm" {
     }
 }
 
-resource "null_resource" "pre_check_ssh_connection" {
+resource "null_resource" "pre_check_create_temp_folder" {
     depends_on = [
-        null_resource.pre_check_compute_kvm
+        null_resource.pre_check_controller_kvm
     ]
 
     connection {
@@ -664,49 +520,6 @@ resource "null_resource" "pre_check_ssh_connection" {
         user     = "root"
         password = var.openstack_nodes_ssh_root_password
         host     = var.controller_node_internal_ip_address
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
-            "check_ssh_connection_of_iface() {",
-            "  NODE_IPS_WITH_CIDR=`ip addr | grep $1 | awk '{ print $2 }' | grep -v $1`",
-            "  STATUS=`echo $?`",
-            "  if [ $STATUS != \"0\" ]; then",
-            "    return 0",
-            "  fi",
-            "  for IP_CIDR in $${NODE_IPS_WITH_CIDR[@]}; do",
-            "    IP=`echo $IP_CIDR | cut -d'/' -f1`",
-            "    SSH_CONNECTION_STATUS=`ss -tnpa -o state established src $IP | grep -i sshd > /dev/null ; echo $?`",
-            "    if [ \"$SSH_CONNECTION_STATUS\" = \"0\" ]; then",
-            "      echo \"[!] External SSH Connection Detected!!\"",
-            "      echo \" External SSH connection will be disconnected while installing OpenStack!\"",
-            "      echo \" Please exit external SSH connection and connect to SSH through internal interface.\"",
-            "      echo \" You can check with 'sudo ss -tnpa -o state established | grep -i sshd' command.\"",
-            "      exit 1",
-            "    fi",
-            "  done",
-            "  return 0",
-            "}",
-            "echo \"[*] Checking SSH connection...\"",
-            "check_ssh_connection_of_iface ${var.controller_node_external_interface}",
-            "check_ssh_connection_of_iface br-ex"
-        ]
-    }
-}
-
-resource "null_resource" "pre_check_create_temp_folder" {
-    depends_on = [
-        null_resource.pre_check_ssh_connection
-    ]
-
-    for_each = local.hosts_ips
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.openstack_nodes_ssh_root_password
-        host     = each.key
     }
 
     provisioner "remote-exec" {
@@ -751,44 +564,9 @@ resource "null_resource" "pre_check_iface_controller_node_internal_ip_prefix" {
     }
 }
 
-resource "null_resource" "pre_check_iface_compute_node_internal_ip_prefix" {
-    depends_on = [
-        null_resource.pre_check_create_temp_folder
-    ]
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.openstack_nodes_ssh_root_password
-        host     = var.compute_node_internal_ip_address
-    }
-
-    provisioner "file" {
-        source      = "${path.root}/utils"
-        destination = "${local.openstack_tmp_dir}/"
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
-            ". ${local.openstack_tmp_dir}/utils/ip_util",
-            "echo \"[*] Checking if compute node's configured internal IP address prefix length is matched...\"",
-            "CIDR_INTERNAL=`get_cidr_from_iface_ip ${var.compute_node_internal_interface} ${var.compute_node_internal_ip_address}; echo $?`",
-            "if [ $CIDR_INTERNAL = \"1\" ]; then",
-            "  echo \"[!] Can't find IP address same with compute_node_internal_interface from Compute Node's internal interface.\"",
-            "  exit 1",
-            "elif [ $CIDR_INTERNAL != ${var.compute_node_internal_ip_address_prefix_length} ]; then",
-            "  echo \"[!] ${var.compute_node_internal_ip_address_prefix_length} is not matched with Compute Node's internal interface.\"",
-            "  exit 1",
-            "fi"
-        ]
-    }
-}
-
 resource "null_resource" "pre_check_iface_controller_node_internal_vip" {
     depends_on = [
-        null_resource.pre_check_iface_controller_node_internal_ip_prefix,
-        null_resource.pre_check_iface_compute_node_internal_ip_prefix
+        null_resource.pre_check_iface_controller_node_internal_ip_prefix
     ]
 
     connection {
@@ -895,24 +673,6 @@ data "template_file" "install_reconfigure_network_template_controller" {
     }
 }
 
-data "template_file" "install_reconfigure_network_template_compute" {
-    depends_on = [
-        null_resource.pre_check_network_manager
-    ]
-
-    template = file("${path.root}/netplan/999-netplan_openstack.tpl")
-
-    vars = {
-        internal_interface = var.compute_node_internal_interface
-        internal_ip_address = var.compute_node_internal_ip_address
-        internal_ip_address_prefix_length = var.compute_node_internal_ip_address_prefix_length
-        external_interface = var.compute_node_external_interface
-        external_ip_address = var.compute_node_external_ip_address
-        external_ip_address_prefix_length = var.compute_node_external_ip_address_prefix_length
-        external_gateway_ip_address = var.openstack_external_subnet_pool_gateway
-    }
-}
-
 resource "null_resource" "install_reconfigure_network_controller" {
     depends_on = [
         data.template_file.install_reconfigure_network_template_controller
@@ -946,53 +706,17 @@ resource "null_resource" "install_reconfigure_network_controller" {
     }
 }
 
-resource "null_resource" "install_reconfigure_network_compute" {
-    depends_on = [
-        data.template_file.install_reconfigure_network_template_compute
-    ]
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.openstack_nodes_ssh_root_password
-        host     = var.compute_node_internal_ip_address
-    }
-
-    provisioner "file" {
-        content     = data.template_file.install_reconfigure_network_template_compute.rendered
-        destination = "/etc/netplan/999-netplan_openstack.yaml"
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
-            "netplan apply"
-        ]
-    }
-
-    provisioner "local-exec" {
-        command = <<-EOT
-        /bin/bash -c '
-        sleep ${local.network_reconfigure_wait_time_seconds}
-        '
-        EOT
-    }
-}
-
 ############ Software Updates ############
 resource "null_resource" "software_updates_stop_unattended_upgrades" {
     depends_on = [
-        null_resource.install_reconfigure_network_controller,
-        null_resource.install_reconfigure_network_compute
+        null_resource.install_reconfigure_network_controller
     ]
-
-    for_each = local.hosts_ips
 
     connection {
         type     = "ssh"
         user     = "root"
         password = var.openstack_nodes_ssh_root_password
-        host     = each.key
+        host     = var.controller_node_internal_ip_address
     }
 
     provisioner "remote-exec" {
@@ -1008,13 +732,11 @@ resource "null_resource" "software_updates_apt_upgrade" {
         null_resource.software_updates_stop_unattended_upgrades
     ]
 
-    for_each = local.hosts_ips
-
     connection {
         type     = "ssh"
         user     = "root"
         password = var.openstack_nodes_ssh_root_password
-        host     = each.key
+        host     = var.controller_node_internal_ip_address
     }
 
     provisioner "remote-exec" {
@@ -1056,149 +778,10 @@ resource "null_resource" "install_hosts_init_setup_hostname_controller" {
     }
 }
 
-resource "null_resource" "install_hosts_init_setup_hosts_file_controller" {
-    depends_on = [
-        null_resource.install_hosts_init_setup_hostname_controller
-    ]
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.openstack_nodes_ssh_root_password
-        host     = var.controller_node_internal_ip_address
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
-            "echo \"[*] Writing hosts file...\"",
-            "sed -i '/'\"${var.compute_node_internal_ip_address}\"' '\"${var.compute_node_hostname}\"'/d' /etc/hosts",
-            "echo \"${var.compute_node_internal_ip_address} ${var.compute_node_hostname}\" >> /etc/hosts",
-            "STATUS=`echo $?`",
-            "if [ $STATUS != 0 ]; then",
-            "  echo \"[!] Failed to write hosts file.\"",
-            "  exit 1",
-            "fi"
-        ]
-    }
-}
-
-resource "null_resource" "install_hosts_install_sshpass" {
-    depends_on = [
-        null_resource.install_hosts_init_setup_hosts_file_controller
-    ]
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.openstack_nodes_ssh_root_password
-        host     = var.controller_node_internal_ip_address
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
-            "apt update && apt install -y sshpass"
-        ]
-    }
-}
-
-resource "null_resource" "install_hosts_init_register_ssh_key" {
-    depends_on = [
-        null_resource.install_hosts_install_sshpass
-    ]
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.openstack_nodes_ssh_root_password
-        host     = var.controller_node_internal_ip_address
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
-            "echo \"[*] Getting SSH public key from compute node...\"",
-            "echo \"y\" | ssh-keygen -t rsa -q -f \"$HOME/.ssh/id_rsa\" -N \"\"",
-            "sed -i '/'\"${var.compute_node_hostname}\"'/d' ~/.ssh/known_hosts > /dev/null 2>&1",
-            "sed -i '/'\"${var.compute_node_internal_ip_address}\"'/d' ~/.ssh/known_hosts > /dev/null 2>&1",
-            "ssh-keyscan -t rsa ${var.compute_node_hostname} >> ~/.ssh/known_hosts",
-            "ssh-keyscan -t rsa ${var.compute_node_internal_ip_address} >> ~/.ssh/known_hosts",
-            "STATUS=`echo $?`",
-            "if [ $STATUS != 0 ]; then",
-            "  echo \"[!] Failed to get SSH public key from compute node.\"",
-            "  exit 1",
-            "fi",
-            "echo \"[*] Registering controller node's SSH key to compute node...\"",
-            "sshpass -p \"${var.openstack_nodes_ssh_root_password}\" ssh-copy-id root@${var.compute_node_hostname}",
-            "STATUS=`echo $?`",
-            "if [ $STATUS != 0 ]; then",
-            "  echo \"[!] Failed to register controller node's SSH key to compute node.\"",
-            "  exit 1",
-            "fi"
-        ]
-    }
-}
-
-resource "null_resource" "install_hosts_init_setup_hostname_compute" {
-    depends_on = [
-        null_resource.install_hosts_init_register_ssh_key
-    ]
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.openstack_nodes_ssh_root_password
-        host     = var.compute_node_internal_ip_address
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
-            "echo \"[*] Setting compute node's hostname...\"",
-            "hostnamectl set-hostname ${var.compute_node_hostname}",
-            "STATUS=`echo $?`",
-            "if [ $STATUS != 0 ]; then",
-            "  echo \"[!] Failed to set compute node's hostname.\"",
-            "  exit 1",
-            "fi",
-            "sed -i '/'\"127.0.1.1\"'/d' /etc/hosts",
-            "echo \"127.0.1.1 ${var.compute_node_hostname}\" >> /etc/hosts"
-        ]
-    }
-}
-
-resource "null_resource" "install_hosts_init_setup_hosts_file_compute" {
-    depends_on = [
-        null_resource.install_hosts_init_setup_hostname_compute
-    ]
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.openstack_nodes_ssh_root_password
-        host     = var.compute_node_internal_ip_address
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
-            "echo \"[*] Modifyting compute node's hosts file...\"",
-            "sed -i '/'\"${var.controller_node_internal_ip_address}\"' '\"${var.controller_node_hostname}\"'/d' /etc/hosts",
-            "echo \"${var.controller_node_internal_ip_address} ${var.controller_node_hostname}\" >> /etc/hosts",
-            "STATUS=`echo $?`",
-            "if [ $STATUS != 0 ]; then",
-            "  echo \"[!] Failed to modify compute node's hosts file.\"",
-            "  exit 1",
-            "fi"
-        ]
-    }
-}
-
 ############## Kolla Ansible #############
 resource "null_resource" "install_kolla_ansible_install_needed_apt_packages" {
     depends_on = [
-        null_resource.install_hosts_init_setup_hosts_file_compute
+        null_resource.install_hosts_init_setup_hostname_controller
     ]
 
     connection {
@@ -1252,7 +835,7 @@ resource "null_resource" "install_kolla_ansible_install_needed_python_packages" 
             "  exit 1",
             "fi",
             "echo \"[*] Installing Ansible...\"",
-            "pip3 install ansible==2.10.7",
+            "pip3 install ansible==6.7.0",
             "STATUS=`echo $?`",
             "if [ $STATUS != 0 ]; then",
             "  echo \"[!] Failed to install Ansible.\"",
@@ -1276,30 +859,16 @@ resource "null_resource" "install_kolla_ansible_install_kolla" {
 
     # Use cloned kolla-ansible folder
     # Remote: https://opendev.org/openstack/kolla-ansible
-    # Branch: stable/xena
-    # Commit Hash: ef9e9b742fb8783ee93025dfc588b22332fd9bd4
+    # Branch: stable/zed
+    # Commit Hash: 033da7aa309aa25f3f4e6bdbb26f574c80819168
 
     # echo "[*] Cleaning Kolla Ansible folder..."
-    # git clone --branch stable/xena https://opendev.org/openstack/kolla-ansible $RUN_PATH/kolla-ansible
+    # git clone --branch stable/zed https://opendev.org/openstack/kolla-ansible $RUN_PATH/kolla-ansible
     # STATUS=`echo $?`
     # if [ $STATUS != 0 ]; then
     #   echo "[!] Failed to clone Kolla Ansible."
     #   exit 1
     # fi
-
-    # echo "[*] Patching bugs in Kolla Ansible..."
-    # echo -n '--- a/'"${RUN_PATH}"'/kolla-ansible/ansible/roles/service-rabbitmq/tasks/main.yml
-    # +++ b/'"${RUN_PATH}"'/kolla-ansible/ansible/roles/service-rabbitmq/tasks/main.yml
-    # @@ -18,6 +18,7 @@
-    #          module_args:
-    #            user: "{{ item.user }}"
-    #            password: "{{ item.password }}"
-    # +          node: "rabbit@{{ ansible_facts.hostname }}"
-    #            update_password: always
-    #            vhost: "{{ item.vhost }}"
-    #            configure_priv: ".*"
-    # ' > ${RUN_PATH}/kolla-ansible/kolla-ansible_rabbitmq.patch \
-    # && patch -p1 < ${RUN_PATH}/kolla-ansible/kolla-ansible_rabbitmq.patch
 
     provisioner "file" {
         source      = "${path.root}/kolla-ansible.tar.gz"
@@ -1377,7 +946,7 @@ resource "null_resource" "install_kolla_ansible_copy_kolla_ansible_configuration
             "  echo \"[!] Error occured while copying Kolla Ansible configuration files.\"",
             "  exit 1",
             "fi",
-            "cp -f ${local.openstack_tmp_dir}/kolla-ansible/ansible/inventory/multinode ${local.openstack_tmp_dir}/",
+            "cp -f ${local.openstack_tmp_dir}/kolla-ansible/ansible/inventory/all-in-one ${local.openstack_tmp_dir}/",
             "STATUS=`echo $?`",
             "if [ $STATUS != 0 ]; then",
             "  echo \"[!] Error occured while copying Kolla Ansible inventory files.\"",
@@ -1387,47 +956,9 @@ resource "null_resource" "install_kolla_ansible_copy_kolla_ansible_configuration
     }
 }
 
-resource "null_resource" "install_kolla_ansible_configure_kolla_ansible_inventory_file" {
-    depends_on = [
-        null_resource.install_kolla_ansible_copy_kolla_ansible_configuration_files
-    ]
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.openstack_nodes_ssh_root_password
-        host     = var.controller_node_internal_ip_address
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
-            "echo \"[*] Setting Kolla Ansible inventory file...\"",
-            "COMPUTE_NODE_WITH_SSH=\"${var.compute_node_hostname} ansible_connection=ssh\"",
-            "sed -i \"/^#/d\" ${local.openstack_tmp_dir}/multinode",
-            "sed -i \"/^$/N;/^\\n$/D\" ${local.openstack_tmp_dir}/multinode",
-            "sed -i \"/\\[control\\]/,/\\[/{/^control[0-9]/d}\" ${local.openstack_tmp_dir}/multinode",
-            "sed -i \"/\\[network\\]/,/\\[/{/^network[0-9]/d}\" ${local.openstack_tmp_dir}/multinode",
-            "sed -i \"/\\[compute\\]/,/\\[/{/^compute[0-9]/d}\" ${local.openstack_tmp_dir}/multinode",
-            "sed -i \"/\\[monitoring\\]/,/\\[/{/^monitoring[0-9]/d}\" ${local.openstack_tmp_dir}/multinode",
-            "sed -i \"/\\[storage\\]/,/\\[/{/^storage[0-9]/d}\" ${local.openstack_tmp_dir}/multinode",
-            "sed -i \"/\\[control\\]/a localhost\" ${local.openstack_tmp_dir}/multinode",
-            "sed -i \"/\\[network\\]/a localhost\" ${local.openstack_tmp_dir}/multinode",
-            "sed -i \"/\\[monitoring\\]/a localhost\" ${local.openstack_tmp_dir}/multinode",
-            "sed -i \"/\\[storage\\]/a localhost\" ${local.openstack_tmp_dir}/multinode",
-            "sed -i \"/\\[compute\\]/a $${COMPUTE_NODE_WITH_SSH}\" ${local.openstack_tmp_dir}/multinode",
-            "STATUS=`echo $?`",
-            "if [ $STATUS != 0 ]; then",
-            "  echo \"[!] Error occured while setting Kolla Ansible inventory file.\"",
-            "  exit 1",
-            "fi"
-        ]
-    }
-}
-
 resource "null_resource" "deploy_openstack_generate_kolla_passwords" {
     depends_on = [
-        null_resource.install_kolla_ansible_configure_kolla_ansible_inventory_file
+        null_resource.install_kolla_ansible_copy_kolla_ansible_configuration_files
     ]
 
     connection {
@@ -1522,38 +1053,40 @@ resource "null_resource" "install_kolla_ansible_configure_kolla_ansible_global_v
         inline = [
             "#!/bin/bash",
             "echo \"[*] Configuring Kolla Ansible global variables...\"",
-            "sed -i 's/^kolla_base_distro:.*/kolla_base_distro: \"ubuntu\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#kolla_base_distro:.*/kolla_base_distro: \"ubuntu\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^network_interface:.*/network_interface: '\"${var.controller_node_internal_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#network_interface:.*/network_interface: '\"${var.controller_node_internal_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^kolla_external_vip_interface::.*/kolla_external_vip_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#kolla_external_vip_interface:.*/kolla_external_vip_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^neutron_external_interface:.*/neutron_external_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#neutron_external_interface:.*/neutron_external_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^kolla_internal_vip_address:.*/kolla_internal_vip_address: '\"${var.openstack_vip_internal}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#kolla_internal_vip_address:.*/kolla_internal_vip_address: '\"${var.openstack_vip_internal}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^kolla_external_vip_address:.*/kolla_external_vip_address: '\"${var.openstack_vip_external}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#kolla_external_vip_address:.*/kolla_external_vip_address: '\"${var.openstack_vip_external}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^docker_registry_insecure:.*/docker_registry_insecure: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#docker_registry_insecure:.*/docker_registry_insecure: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_cinder:.*/enable_cinder: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_cinder:.*/enable_cinder: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_cinder_backup:.*/enable_cinder_backup: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_cinder_backup:.*/enable_cinder_backup: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_cinder_backend_nfs:.*/enable_cinder_backend_nfs: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_cinder_backend_nfs:.*/enable_cinder_backend_nfs: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_neutron_provider_networks:.*/enable_neutron_provider_networks: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_neutron_provider_networks:.*/enable_neutron_provider_networks: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_octavia:.*/enable_octavia: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_octavia:.*/enable_octavia: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_openvswitch:.*/enable_openvswitch: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_openvswitch:.*/enable_openvswitch: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_ovn:.*/enable_ovn: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_ovn:.*/enable_ovn: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^neutron_ovn_distributed_fip:.*/neutron_ovn_distributed_fip: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#neutron_ovn_distributed_fip:.*/neutron_ovn_distributed_fip: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i '/neutron_plugin_agent/d' /etc/kolla/globals.yml",
-            "echo 'neutron_plugin_agent: \"ovn\"' >> /etc/kolla/globals.yml",
+            "mkdir -p /etc/kolla/globals.d/",
+            "cp -f /etc/kolla/globals.yml /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^kolla_base_distro:.*/kolla_base_distro: \"ubuntu\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#kolla_base_distro:.*/kolla_base_distro: \"ubuntu\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^network_interface:.*/network_interface: '\"${var.controller_node_internal_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#network_interface:.*/network_interface: '\"${var.controller_node_internal_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^kolla_external_vip_interface::.*/kolla_external_vip_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#kolla_external_vip_interface:.*/kolla_external_vip_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^neutron_external_interface:.*/neutron_external_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#neutron_external_interface:.*/neutron_external_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^kolla_internal_vip_address:.*/kolla_internal_vip_address: '\"${var.openstack_vip_internal}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#kolla_internal_vip_address:.*/kolla_internal_vip_address: '\"${var.openstack_vip_internal}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^kolla_external_vip_address:.*/kolla_external_vip_address: '\"${var.openstack_vip_external}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#kolla_external_vip_address:.*/kolla_external_vip_address: '\"${var.openstack_vip_external}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^docker_registry_insecure:.*/docker_registry_insecure: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#docker_registry_insecure:.*/docker_registry_insecure: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_cinder:.*/enable_cinder: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_cinder:.*/enable_cinder: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_cinder_backup:.*/enable_cinder_backup: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_cinder_backup:.*/enable_cinder_backup: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_cinder_backend_nfs:.*/enable_cinder_backend_nfs: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_cinder_backend_nfs:.*/enable_cinder_backend_nfs: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_neutron_provider_networks:.*/enable_neutron_provider_networks: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_neutron_provider_networks:.*/enable_neutron_provider_networks: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_octavia:.*/enable_octavia: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_octavia:.*/enable_octavia: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_openvswitch:.*/enable_openvswitch: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_openvswitch:.*/enable_openvswitch: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_ovn:.*/enable_ovn: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_ovn:.*/enable_ovn: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^neutron_ovn_distributed_fip:.*/neutron_ovn_distributed_fip: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#neutron_ovn_distributed_fip:.*/neutron_ovn_distributed_fip: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i '/neutron_plugin_agent/d' /etc/kolla/globals.d/globals.yml",
+            "echo 'neutron_plugin_agent: \"ovn\"' >> /etc/kolla/globals.d/globals.yml",
             "STATUS=`echo $?`",
             "if [ $STATUS != 0 ]; then",
             "  echo \"[!] Failed to configure Kolla Ansible global variables...\"",
@@ -1569,13 +1102,11 @@ resource "null_resource" "nfs_configuration_install_nfs_apt_packages" {
         null_resource.install_kolla_ansible_configure_kolla_ansible_global_variables
     ]
 
-    for_each = local.hosts_ips
-
     connection {
         type     = "ssh"
         user     = "root"
         password = var.openstack_nodes_ssh_root_password
-        host     = each.key
+        host     = var.controller_node_internal_ip_address
     }
 
     provisioner "remote-exec" {
@@ -1622,26 +1153,7 @@ resource "null_resource" "nfs_configuration_configure_controller_node" {
             "if [ $STATUS != 0 ]; then",
             "  echo \"[!] Failed to modify controller node's fstab file.\"",
             "  exit 1",
-            "fi"
-        ]
-    }
-}
-
-resource "null_resource" "nfs_configuration_configure_compute_node" {
-    depends_on = [
-        null_resource.nfs_configuration_configure_controller_node
-    ]
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.openstack_nodes_ssh_root_password
-        host     = var.compute_node_internal_ip_address
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
+            "fi",
             "echo \"[*] Adding Nova Compute NFS target to fstab...\"",
             "sed -i '/nova_compute/d' /etc/fstab",
             "echo \"${var.openstack_nova_compute_instances_nfs_target} /var/lib/docker/volumes/nova_compute/_data/instances nfs defaults,_netdev 0 0\" >> /etc/fstab",
@@ -1657,7 +1169,7 @@ resource "null_resource" "nfs_configuration_configure_compute_node" {
 ############# Deploy Openstack ###########
 resource "null_resource" "deploy_openstack_bootstrap_servers" {
     depends_on = [
-        null_resource.nfs_configuration_configure_compute_node
+        null_resource.nfs_configuration_configure_controller_node
     ]
 
     connection {
@@ -1671,7 +1183,8 @@ resource "null_resource" "deploy_openstack_bootstrap_servers" {
         inline = [
             "#!/bin/bash",
             "echo \"[*] Bootstrapping servers...\"",
-            "kolla-ansible -i ${local.openstack_tmp_dir}/multinode bootstrap-servers",
+            "kolla-ansible install-deps",
+            "kolla-ansible -i ${local.openstack_tmp_dir}/all-in-one bootstrap-servers",
             "STATUS=`echo $?`",
             "if [ $STATUS != 0 ]; then",
             "  echo \"[!] Kolla Ansible bootstrap failed.\"",
@@ -1723,7 +1236,7 @@ resource "null_resource" "deploy_openstack_run_prechecks" {
         inline = [
             "#!/bin/bash",
             "echo \"[*] Running precheks...\"",
-            "kolla-ansible -i ${local.openstack_tmp_dir}/multinode prechecks",
+            "kolla-ansible -i ${local.openstack_tmp_dir}/all-in-one prechecks",
             "STATUS=`echo $?`",
             "if [ $STATUS != 0 ]; then",
             "  echo \"[!] Kolla Ansible prechecks failed.\"",
@@ -1749,7 +1262,7 @@ resource "null_resource" "deploy_openstack_run_pull" {
         inline = [
             "#!/bin/bash",
             "echo \"[*] Running precheks...\"",
-            "kolla-ansible -i ${local.openstack_tmp_dir}/multinode pull",
+            "kolla-ansible -i ${local.openstack_tmp_dir}/all-in-one pull",
             "STATUS=`echo $?`",
             "if [ $STATUS != 0 ]; then",
             "  echo \"[!] Kolla Ansible pull failed.\"",
@@ -1775,7 +1288,7 @@ resource "null_resource" "deploy_openstack_run_deploy" {
         inline = [
             "#!/bin/bash",
             "echo \"[*] Deploying OpenStack...\"",
-            "kolla-ansible -i ${local.openstack_tmp_dir}/multinode deploy",
+            "kolla-ansible -i ${local.openstack_tmp_dir}/all-in-one deploy",
             "STATUS=`echo $?`",
             "if [ $STATUS != 0 ]; then",
             "  echo \"[!] Kolla Ansible deploy failed.\"",
@@ -1802,15 +1315,13 @@ resource "null_resource" "deploy_openstack_configure_external_interface_controll
             "#!/bin/bash",
             "echo \"[*] Configuring Controller Node's External Interface...\"",
             "sed -i 's/'\"${var.controller_node_external_interface}\"'/br-ex/g' /etc/netplan/*.yaml",
-            "sed -i 's/'\"${var.openstack_vip_external}\"' dev '\"${var.controller_node_external_interface}\"'/'\"${var.openstack_vip_external}\"' dev br-ex/g' /etc/kolla/keepalived/keepalived.conf",
-            "echo \"    ${var.controller_node_external_interface}: {}\" >> /etc/netplan/999-netplan_openstack.yaml",
-            "netplan apply",
-            "ip address del ${var.controller_node_external_ip_address}/${var.controller_node_external_ip_address_prefix_length} dev ${var.controller_node_external_interface} > /dev/null 2>&1"
+            "sed -i 's/'\"${var.openstack_vip_external}\"' dev '\"${var.controller_node_external_interface}\"'/'\"${var.openstack_vip_external}\"' dev br-ex/g' /etc/kolla/keepalived/keepalived.conf"
         ]
     }
 }
 
-resource "null_resource" "deploy_openstack_configure_external_interface_compute_node" {
+############### Mount All ################
+resource "null_resource" "mount_all_in_fstab" {
     depends_on = [
         null_resource.deploy_openstack_configure_external_interface_controller_node
     ]
@@ -1819,34 +1330,7 @@ resource "null_resource" "deploy_openstack_configure_external_interface_compute_
         type     = "ssh"
         user     = "root"
         password = var.openstack_nodes_ssh_root_password
-        host     = var.compute_node_internal_ip_address
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "#!/bin/bash",
-            "echo \"[*] Configuring Compute Node's External Interface...\"",
-            "sed -i 's/'\"${var.compute_node_external_interface}\"'/br-ex/g' /etc/netplan/*.yaml",
-            "echo \"    ${var.compute_node_external_interface}: {}\" >> /etc/netplan/999-netplan_openstack.yaml",
-            "netplan apply",
-            "ip address del ${var.compute_node_external_ip_address}/${var.compute_node_external_ip_address_prefix_length} dev ${var.compute_node_external_interface} > /dev/null 2>&1"
-        ]
-    }
-}
-
-############### Mount All ################
-resource "null_resource" "mount_all_in_fstab" {
-    depends_on = [
-        null_resource.deploy_openstack_configure_external_interface_compute_node
-    ]
-
-    for_each = local.hosts_ips
-
-    connection {
-        type     = "ssh"
-        user     = "root"
-        password = var.openstack_nodes_ssh_root_password
-        host     = each.key
+        host     = var.controller_node_internal_ip_address
     }
 
     provisioner "remote-exec" {
@@ -1873,13 +1357,11 @@ resource "null_resource" "fix_issues_nfs_mount_on_boot_issue" {
         null_resource.mount_all_in_fstab
     ]
 
-    for_each = local.hosts_ips
-
     connection {
         type     = "ssh"
         user     = "root"
         password = var.openstack_nodes_ssh_root_password
-        host     = each.key
+        host     = var.controller_node_internal_ip_address
     }
 
     provisioner "file" {
@@ -1913,7 +1395,7 @@ resource "null_resource" "fix_issues_instance_create_timeout_issue" {
         type     = "ssh"
         user     = "root"
         password = var.openstack_nodes_ssh_root_password
-        host     = var.compute_node_internal_ip_address
+        host     = var.controller_node_internal_ip_address
     }
 
     provisioner "remote-exec" {
@@ -1927,6 +1409,104 @@ resource "null_resource" "fix_issues_instance_create_timeout_issue" {
     }
 }
 
+########### Fix external interface issue ##########
+data "template_file" "fix_external_interface_issue_template_controller" {
+    depends_on = [
+        null_resource.fix_issues_instance_create_timeout_issue
+    ]
+
+    template = file("${path.root}/netplan/999-netplan_openstack_after_deploy.tpl")
+
+    vars = {
+        internal_interface = var.controller_node_internal_interface
+        internal_ip_address = var.controller_node_internal_ip_address
+        internal_ip_address_prefix_length = var.controller_node_internal_ip_address_prefix_length
+        external_interface = var.controller_node_external_interface
+        external_ip_address = var.controller_node_external_ip_address
+        external_ip_address_prefix_length = var.controller_node_external_ip_address_prefix_length
+        external_gateway_ip_address = var.openstack_external_subnet_pool_gateway
+    }
+}
+
+resource "null_resource" "fix_external_interface_issue" {
+    depends_on = [
+        data.template_file.fix_external_interface_issue_template_controller
+    ]
+
+    connection {
+        type     = "ssh"
+        user     = "root"
+        password = var.openstack_nodes_ssh_root_password
+        host     = var.controller_node_internal_ip_address
+    }
+
+    provisioner "file" {
+        content     = data.template_file.fix_external_interface_issue_template_controller.rendered
+        destination = "/etc/netplan/999-netplan_openstack.yaml"
+    }
+}
+
+##########################################
+# Reboot Nodes
+##########################################
+resource "null_resource" "reboot_nodes_reboot_controller_node" {
+    depends_on = [
+        null_resource.fix_external_interface_issue
+    ]
+
+    connection {
+        type     = "ssh"
+        user     = "root"
+        password = var.openstack_nodes_ssh_root_password
+        host     = var.controller_node_internal_ip_address
+    }
+
+    provisioner "remote-exec" {
+        inline = [
+            "#!/bin/bash",
+            "shutdown -r 1",
+            "service ssh stop"
+        ]
+    }
+
+    provisioner "local-exec" {
+        command = <<-EOT
+        /bin/bash -c '
+        sleep 60
+        '
+        EOT
+    }
+}
+
+resource "null_resource" "reboot_nodes_wait_controller_node" {
+    depends_on = [
+        null_resource.reboot_nodes_reboot_controller_node
+    ]
+
+    provisioner "local-exec" {
+        command = <<-EOT
+        /bin/bash -c '
+        echo "[*] Waiting for SSH connection of controller node..."
+        cnt=0
+        while :
+        do
+           cnt=`expr $cnt + 1`
+           echo -e "\x1dclose\x0d" | telnet ${var.controller_node_internal_ip_address} 22
+           CONTROLLER_NODE_CONNECTION_STATUS=`echo $?`
+           if [ "$CONTROLLER_NODE_CONNECTION_STATUS" = "0" ]; then
+              break
+           fi
+           if [ "$cnt" = "${local.node_connection_check_retry_counts}" ]; then
+              echo "Failed to connect to controller node!"
+              exit 1
+           fi
+           sleep ${local.node_connection_check_retry_interval_seconds}
+        done
+        '
+        EOT
+  }
+}
+
 ##########################################
 # post-install
 ##########################################
@@ -1934,7 +1514,7 @@ resource "null_resource" "fix_issues_instance_create_timeout_issue" {
 ######## Install OpenStack Client ########
 resource "null_resource" "post_install_openstack_client_openstackclient" {
     depends_on = [
-        null_resource.fix_issues_instance_create_timeout_issue
+        null_resource.reboot_nodes_wait_controller_node
     ]
 
     connection {
@@ -2095,13 +1675,11 @@ resource "null_resource" "post_install_hosts_cleanup_controller" {
         null_resource.post_install_openstack_client_register_initialize_script
     ]
 
-    for_each = local.hosts_ips
-
     connection {
         type     = "ssh"
         user     = "root"
         password = var.openstack_nodes_ssh_root_password
-        host     = each.key
+        host     = var.controller_node_internal_ip_address
     }
 
     provisioner "remote-exec" {
@@ -2109,12 +1687,7 @@ resource "null_resource" "post_install_hosts_cleanup_controller" {
             "#!/bin/bash",
             "echo \"[*] Cleaning up hosts file ...\"",
             "sed -i '/^#*.*ANSIBLE GENERATED*.*/d' /etc/hosts",
-            "sed -i '/'\"${var.controller_node_internal_ip_address}\"'/d' /etc/hosts",
-            "sed -i '/'\"${var.controller_node_hostname}\"'/d' /etc/hosts",
-            "sed -i '/'\"${var.compute_node_internal_ip_address}\"'/d' /etc/hosts",
-            "sed -i '/'\"${var.compute_node_hostname}\"'/d' /etc/hosts",
-            "echo \"${var.controller_node_internal_ip_address} ${var.controller_node_hostname}\" >> /etc/hosts",
-            "echo \"${var.compute_node_internal_ip_address} ${var.compute_node_hostname}\" >> /etc/hosts"
+            "sed -i '/'\"${var.controller_node_internal_ip_address}\"'/d' /etc/hosts"
         ]
     }
 }

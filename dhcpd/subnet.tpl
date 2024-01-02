@@ -14,10 +14,4 @@ subnet DHCPD_SUBNET netmask DHCPD_NETMASK {
         fixed-address DHCPD_CONTROLLER_INTERNAL_IP;
         filename "DHCPD_PXE_PATH_CONTROLLER";
     }
-
-    host node.compute {
-        hardware ethernet DHCPD_COMPUTE_MAC_ADDRESS;
-        fixed-address DHCPD_COMPUTE_INTERNAL_IP;
-        filename "DHCPD_PXE_PATH_COMPUTE";
-    }
 }
