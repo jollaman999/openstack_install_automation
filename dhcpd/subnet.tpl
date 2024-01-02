@@ -15,9 +15,15 @@ subnet DHCPD_SUBNET netmask DHCPD_NETMASK {
         filename "DHCPD_PXE_PATH_CONTROLLER";
     }
 
-    host node.compute {
-        hardware ethernet DHCPD_COMPUTE_MAC_ADDRESS;
-        fixed-address DHCPD_COMPUTE_INTERNAL_IP;
-        filename "DHCPD_PXE_PATH_COMPUTE";
+    host node.compute1 {
+        hardware ethernet DHCPD_COMPUTE1_MAC_ADDRESS;
+        fixed-address DHCPD_COMPUTE1_INTERNAL_IP;
+        filename "DHCPD_PXE_PATH_COMPUTE1";
+    }
+
+    host node.compute2 {
+        hardware ethernet DHCPD_COMPUTE2_MAC_ADDRESS;
+        fixed-address DHCPD_COMPUTE2_INTERNAL_IP;
+        filename "DHCPD_PXE_PATH_COMPUTE2";
     }
 }
