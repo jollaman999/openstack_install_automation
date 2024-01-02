@@ -591,10 +591,10 @@ resource "null_resource" "pre_check_os" {
         inline = [
             "#!/bin/bash",
             "CHECK_OS_ID=`lsb_release -i | grep -i \"ubuntu\" > /dev/null 2>&1 ; echo $?`",
-            "CHECK_OS_RELEASE=`lsb_release -r | grep -i \"20.04\" > /dev/null 2>&1 ; echo $?`",
+            "CHECK_OS_RELEASE=`lsb_release -r | grep -i \"22.04\" > /dev/null 2>&1 ; echo $?`",
             "echo \"[*] Checking OS version...\"",
             "if [ $CHECK_OS_ID != \"0\" ] || [ $CHECK_OS_RELEASE != \"0\" ]; then",
-            "  echo \"[!] This script only supports Ubuntu 20.04.\"",
+            "  echo \"[!] This script only supports Ubuntu 22.04.\"",
             "  exit 1",
             "fi"
         ]
@@ -1252,7 +1252,7 @@ resource "null_resource" "install_kolla_ansible_install_needed_python_packages" 
             "  exit 1",
             "fi",
             "echo \"[*] Installing Ansible...\"",
-            "pip3 install ansible==2.10.7",
+            "pip3 install ansible==6.7.0",
             "STATUS=`echo $?`",
             "if [ $STATUS != 0 ]; then",
             "  echo \"[!] Failed to install Ansible.\"",
@@ -1276,30 +1276,16 @@ resource "null_resource" "install_kolla_ansible_install_kolla" {
 
     # Use cloned kolla-ansible folder
     # Remote: https://opendev.org/openstack/kolla-ansible
-    # Branch: stable/xena
-    # Commit Hash: ef9e9b742fb8783ee93025dfc588b22332fd9bd4
+    # Branch: stable/zed
+    # Commit Hash: 033da7aa309aa25f3f4e6bdbb26f574c80819168
 
     # echo "[*] Cleaning Kolla Ansible folder..."
-    # git clone --branch stable/xena https://opendev.org/openstack/kolla-ansible $RUN_PATH/kolla-ansible
+    # git clone --branch stable/zed https://opendev.org/openstack/kolla-ansible $RUN_PATH/kolla-ansible
     # STATUS=`echo $?`
     # if [ $STATUS != 0 ]; then
     #   echo "[!] Failed to clone Kolla Ansible."
     #   exit 1
     # fi
-
-    # echo "[*] Patching bugs in Kolla Ansible..."
-    # echo -n '--- a/'"${RUN_PATH}"'/kolla-ansible/ansible/roles/service-rabbitmq/tasks/main.yml
-    # +++ b/'"${RUN_PATH}"'/kolla-ansible/ansible/roles/service-rabbitmq/tasks/main.yml
-    # @@ -18,6 +18,7 @@
-    #          module_args:
-    #            user: "{{ item.user }}"
-    #            password: "{{ item.password }}"
-    # +          node: "rabbit@{{ ansible_facts.hostname }}"
-    #            update_password: always
-    #            vhost: "{{ item.vhost }}"
-    #            configure_priv: ".*"
-    # ' > ${RUN_PATH}/kolla-ansible/kolla-ansible_rabbitmq.patch \
-    # && patch -p1 < ${RUN_PATH}/kolla-ansible/kolla-ansible_rabbitmq.patch
 
     provisioner "file" {
         source      = "${path.root}/kolla-ansible.tar.gz"
@@ -1522,38 +1508,41 @@ resource "null_resource" "install_kolla_ansible_configure_kolla_ansible_global_v
         inline = [
             "#!/bin/bash",
             "echo \"[*] Configuring Kolla Ansible global variables...\"",
-            "sed -i 's/^kolla_base_distro:.*/kolla_base_distro: \"ubuntu\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#kolla_base_distro:.*/kolla_base_distro: \"ubuntu\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^network_interface:.*/network_interface: '\"${var.controller_node_internal_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#network_interface:.*/network_interface: '\"${var.controller_node_internal_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^kolla_external_vip_interface::.*/kolla_external_vip_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#kolla_external_vip_interface:.*/kolla_external_vip_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^neutron_external_interface:.*/neutron_external_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#neutron_external_interface:.*/neutron_external_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^kolla_internal_vip_address:.*/kolla_internal_vip_address: '\"${var.openstack_vip_internal}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#kolla_internal_vip_address:.*/kolla_internal_vip_address: '\"${var.openstack_vip_internal}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^kolla_external_vip_address:.*/kolla_external_vip_address: '\"${var.openstack_vip_external}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#kolla_external_vip_address:.*/kolla_external_vip_address: '\"${var.openstack_vip_external}\"'/g' /etc/kolla/globals.yml",
-            "sed -i 's/^docker_registry_insecure:.*/docker_registry_insecure: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#docker_registry_insecure:.*/docker_registry_insecure: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_cinder:.*/enable_cinder: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_cinder:.*/enable_cinder: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_cinder_backup:.*/enable_cinder_backup: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_cinder_backup:.*/enable_cinder_backup: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_cinder_backend_nfs:.*/enable_cinder_backend_nfs: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_cinder_backend_nfs:.*/enable_cinder_backend_nfs: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_neutron_provider_networks:.*/enable_neutron_provider_networks: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_neutron_provider_networks:.*/enable_neutron_provider_networks: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_octavia:.*/enable_octavia: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_octavia:.*/enable_octavia: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_openvswitch:.*/enable_openvswitch: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_openvswitch:.*/enable_openvswitch: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^enable_ovn:.*/enable_ovn: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#enable_ovn:.*/enable_ovn: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^neutron_ovn_distributed_fip:.*/neutron_ovn_distributed_fip: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i 's/^#neutron_ovn_distributed_fip:.*/neutron_ovn_distributed_fip: \"yes\"/g' /etc/kolla/globals.yml",
-            "sed -i '/neutron_plugin_agent/d' /etc/kolla/globals.yml",
-            "echo 'neutron_plugin_agent: \"ovn\"' >> /etc/kolla/globals.yml",
+            "USE_NFS_SERVER=`echo \"${var.openstack_use_nfs_storage_server}\" | tr '[:upper:]' '[:lower:]'`",
+            "mkdir -p /etc/kolla/globals.d/",
+            "cp -f /etc/kolla/globals.yml /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^kolla_base_distro:.*/kolla_base_distro: \"ubuntu\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#kolla_base_distro:.*/kolla_base_distro: \"ubuntu\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^network_interface:.*/network_interface: '\"${var.controller_node_internal_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#network_interface:.*/network_interface: '\"${var.controller_node_internal_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^kolla_external_vip_interface::.*/kolla_external_vip_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#kolla_external_vip_interface:.*/kolla_external_vip_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^neutron_external_interface:.*/neutron_external_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#neutron_external_interface:.*/neutron_external_interface: '\"${var.controller_node_external_interface}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^kolla_internal_vip_address:.*/kolla_internal_vip_address: '\"${var.openstack_vip_internal}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#kolla_internal_vip_address:.*/kolla_internal_vip_address: '\"${var.openstack_vip_internal}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^kolla_external_vip_address:.*/kolla_external_vip_address: '\"${var.openstack_vip_external}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#kolla_external_vip_address:.*/kolla_external_vip_address: '\"${var.openstack_vip_external}\"'/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^docker_registry_insecure:.*/docker_registry_insecure: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#docker_registry_insecure:.*/docker_registry_insecure: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_cinder:.*/enable_cinder: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_cinder:.*/enable_cinder: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_cinder_backup:.*/enable_cinder_backup: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_cinder_backup:.*/enable_cinder_backup: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_cinder_backend_nfs:.*/enable_cinder_backend_nfs: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_cinder_backend_nfs:.*/enable_cinder_backend_nfs: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_neutron_provider_networks:.*/enable_neutron_provider_networks: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_neutron_provider_networks:.*/enable_neutron_provider_networks: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_octavia:.*/enable_octavia: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_octavia:.*/enable_octavia: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_openvswitch:.*/enable_openvswitch: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_openvswitch:.*/enable_openvswitch: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^enable_ovn:.*/enable_ovn: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#enable_ovn:.*/enable_ovn: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^neutron_ovn_distributed_fip:.*/neutron_ovn_distributed_fip: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i 's/^#neutron_ovn_distributed_fip:.*/neutron_ovn_distributed_fip: \"yes\"/g' /etc/kolla/globals.d/globals.yml",
+            "sed -i '/neutron_plugin_agent/d' /etc/kolla/globals.d/globals.yml",
+            "echo 'neutron_plugin_agent: \"ovn\"' >> /etc/kolla/globals.d/globals.yml",
             "STATUS=`echo $?`",
             "if [ $STATUS != 0 ]; then",
             "  echo \"[!] Failed to configure Kolla Ansible global variables...\"",
@@ -1671,6 +1660,7 @@ resource "null_resource" "deploy_openstack_bootstrap_servers" {
         inline = [
             "#!/bin/bash",
             "echo \"[*] Bootstrapping servers...\"",
+            "kolla-ansible install-deps",
             "kolla-ansible -i ${local.openstack_tmp_dir}/multinode bootstrap-servers",
             "STATUS=`echo $?`",
             "if [ $STATUS != 0 ]; then",
