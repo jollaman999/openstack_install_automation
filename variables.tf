@@ -19,13 +19,9 @@ variable "iscsi_os_volume_target_name_controller_node" {
   description = "Controller 노드의 iSCSI OS 볼륨 타겟 이름"
   default = "iqn.openstack-controller_terraform.target"
 }
-variable "iscsi_os_volume_target_name_compute1_node" {
-  description = "Compute 1 노드의 iSCSI OS 볼륨 타겟 이름"
-  default = "iqn.openstack-compute1_terraform.target"
-}
-variable "iscsi_os_volume_target_name_compute2_node" {
-  description = "Compute 2 노드의 iSCSI OS 볼륨 타겟 이름"
-  default = "iqn.openstack-compute2_terraform.target"
+variable "iscsi_os_volume_target_name_compute_node" {
+  description = "Compute 노드의 iSCSI OS 볼륨 타겟 이름"
+  default = "iqn.openstack-compute_terraform.target"
 }
 variable "iscsi_os_volume_snapshot_name_controller_node" {
   description = "Controller 노드의 iSCSI OS 볼륨 스냅샷 이름"
@@ -39,12 +35,8 @@ variable "iscsi_os_volume_clone_name_controller_node" {
   description = "Controller 노드의 iSCSI OS 볼륨 클론 이름"
   default = ""
 }
-variable "iscsi_os_volume_clone_name_compute1_node" {
-  description = "Compute 1 노드의 iSCSI OS 볼륨 클론 이름"
-  default = ""
-}
-variable "iscsi_os_volume_clone_name_compute2_node" {
-  description = "Compute 2 노드의 iSCSI OS 볼륨 클론 이름"
+variable "iscsi_os_volume_clone_name_compute_node" {
+  description = "Compute 노드의 iSCSI OS 볼륨 클론 이름"
   default = ""
 }
 variable "iscsi_os_volume_size_controller_node" {
@@ -100,12 +92,8 @@ variable "dhcp_mac_address_controller_node" {
   description = "DHCP 서버 설정파일에 작성될 Controller 노드의 MAC 주소"
   default = ""
 }
-variable "dhcp_mac_address_compute1_node" {
-  description = "DHCP 서버 설정파일에 작성될 Compute 1 노드의 MAC 주소"
-  default = ""
-}
-variable "dhcp_mac_address_compute2_node" {
-  description = "DHCP 서버 설정파일에 작성될 Compute 2 노드의 MAC 주소"
+variable "dhcp_mac_address_compute_node" {
+  description = "DHCP 서버 설정파일에 작성될 Compute 노드의 MAC 주소"
   default = ""
 }
 variable "ipmi_ip_address_controller_node" {
@@ -122,30 +110,16 @@ variable "ipmi_user_password_controller_node" {
   sensitive = true
   default = ""
 }
-variable "ipmi_ip_address_compute1_node" {
-  description = "Compute 1 노드 IPMI IP 주소"
+variable "ipmi_ip_address_compute_node" {
+  description = "Compute 노드 IPMI IP 주소"
   default = ""
 }
-variable "ipmi_user_name_compute1_node" {
-  description = "Compute 1 노드 IPMI 사용자 이름"
+variable "ipmi_user_name_compute_node" {
+  description = "Compute 노드 IPMI 사용자 이름"
   default = ""
 }
-variable "ipmi_user_password_compute1_node" {
-  description = "Compute 1 노드 IPMI 사용자 암호"
-  type = string
-  sensitive = true
-  default = ""
-}
-variable "ipmi_ip_address_compute2_node" {
-  description = "Compute 2 노드 IPMI IP 주소"
-  default = ""
-}
-variable "ipmi_user_name_compute2_node" {
-  description = "Compute 2 노드 IPMI 사용자 이름"
-  default = ""
-}
-variable "ipmi_user_password_compute2_node" {
-  description = "Compute 2 노드 IPMI 사용자 암호"
+variable "ipmi_user_password_compute_node" {
+  description = "Compute 노드 IPMI 사용자 암호"
   type = string
   sensitive = true
   default = ""
@@ -180,51 +154,28 @@ variable "controller_node_external_ip_address_prefix_length" {
 variable "controller_node_external_interface" {
   description = "Controller 노드 외부 인터페이스명"
 }
-// compute 1
-variable "compute1_node_hostname" {
-  description = "Compute 1 노드 호스트명"
+// compute
+variable "compute_node_hostname" {
+  description = "Compute 노드 호스트명"
   default = "compute-node"
 }
-variable "compute1_node_internal_ip_address" {
-  description = "Compute 1 노드 내부 인터페이스 IP 주소"
+variable "compute_node_internal_ip_address" {
+  description = "Compute 노드 내부 인터페이스 IP 주소"
 }
-variable "compute1_node_internal_ip_address_prefix_length" {
-  description = "Compute 1 노드 내부 인터페이스 IP 주소 서브넷 마스크 Prefix"
+variable "compute_node_internal_ip_address_prefix_length" {
+  description = "Compute 노드 내부 인터페이스 IP 주소 서브넷 마스크 Prefix"
 }
-variable "compute1_node_internal_interface" {
-  description = "Compute 1 노드 내부 인터페이스명"
+variable "compute_node_internal_interface" {
+  description = "Compute 노드 내부 인터페이스명"
 }
-variable "compute1_node_external_ip_address" {
-  description = "Compute 1 노드 외부 인터페이스 IP 주소"
+variable "compute_node_external_ip_address" {
+  description = "Compute 노드 외부 인터페이스 IP 주소"
 }
-variable "compute1_node_external_ip_address_prefix_length" {
-  description = "Compute 1 노드 외부 인터페이스 IP 주소 서브넷 마스크 Prefix"
+variable "compute_node_external_ip_address_prefix_length" {
+  description = "Compute 노드 외부 인터페이스 IP 주소 서브넷 마스크 Prefix"
 }
-variable "compute1_node_external_interface" {
-  description = "Compute 1 노드 외부 인터페이스명"
-}
-// compute 2
-variable "compute2_node_hostname" {
-  description = "Compute 2 노드 호스트명"
-  default = "compute-node"
-}
-variable "compute2_node_internal_ip_address" {
-  description = "Compute 2 노드 내부 인터페이스 IP 주소"
-}
-variable "compute2_node_internal_ip_address_prefix_length" {
-  description = "Compute 2 노드 내부 인터페이스 IP 주소 서브넷 마스크 Prefix"
-}
-variable "compute2_node_internal_interface" {
-  description = "Compute 2 노드 내부 인터페이스명"
-}
-variable "compute2_node_external_ip_address" {
-  description = "Compute 2 노드 외부 인터페이스 IP 주소"
-}
-variable "compute2_node_external_ip_address_prefix_length" {
-  description = "Compute 2 노드 외부 인터페이스 IP 주소 서브넷 마스크 Prefix"
-}
-variable "compute2_node_external_interface" {
-  description = "Compute 2 노드 외부 인터페이스명"
+variable "compute_node_external_interface" {
+  description = "Compute 노드 외부 인터페이스명"
 }
 
 /* OpenStack Settings */
@@ -282,6 +233,7 @@ variable "openstack_internal_subnet_range" {
 variable "openstack_internal_subnet_gateway" {
   description = "OpenStack 내부 서브넷 게이트웨이"
 }
+
 variable "openstack_router_enable_snat" {
   description = "OpenStack 라우터 SNAT 사용 여부"
   type = bool

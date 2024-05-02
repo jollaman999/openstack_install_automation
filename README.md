@@ -2,20 +2,31 @@
 
 ## 1. 요구 사항
 
-- 필요 노드 4대 (Controller 노드 1대, Compute 노드 2대, Storage 노드 1대)
+- 필요 노드 3대 (Controller 노드, Compute 노드, Storage 노드)
 - 인프라 자동 구성 기능 사용시 다음과 같은 사항들을 추가로 필요로 함
     - OpenStack을 구성하는 Controller 노드와 Compute 노드에서 IPMI 지원
     - isc-dhcp-server 패키지를 이용하는 DHCP 서버
     - TFTP 서버
     - FreeBSD 를 사용하며, ZFS 파일시스템과 ctld 로 구성된 iSCSI 서버
-- Controller 노드, Compute 노드 요구 사항
+- Controller 노드 요구 사항
+    - CPU: 4Core 이상
+    - RAM: 8GB 이상
+    - Disk: 10GB 이상
+    - NIC 2개
+        - External: 외부 통신용 1개
+        - Internal: 내부 통신용 1개
+    - OS: Ubuntu 20.04 LTS
+    - Kernel: 4.15+, IPv6 Enabled
+    - Python 3.6.x~3.7.x
+    - SSH Server Installed
+- Compute 노드 요구 사항
     - CPU: 솔루션 설치를 위해 16Core 이상 권장, 가상화 활성화
     - RAM: 솔루션 설치를 위해 32GB 이상 권장
     - Disk:  10GB 이상
     - NIC 2개
         - External: 외부 통신용 1개
         - Internal: 내부 통신용 1개
-    - OS: Ubuntu 22.04 LTS
+    - OS: Ubuntu 20.04 LTS
     - Kernel: 4.15+, IPv6 Enable, KVM Enabled
     - Python 3.6.x~3.7.x
     - SSH Server Installed
@@ -27,7 +38,7 @@
 
 ## 2. 사전 필요 설정 사항
 
-- Controller 노드 1대
+- Controller 노드
     - NIC
         - External
             - 외부 인터넷과 통신 가능하도록 IP, Gateway, 네임서버를 설정합니다.
@@ -35,7 +46,7 @@
         - Internal
             - Compute 노드, Storage 노드와 통신 가능하도록 IP를 설정합니다.
     - SSH 서버 설치 및 root 계정 패스워드 로그인 활성화 (Compute 노드와 동일한 패스워드 설정)
-- Compute  노드 2대
+- Compute  노드
     - NIC
         - External
             - 외부 인터넷과 통신 가능하도록 IP, Gateway, 네임서버를 설정합니다.
@@ -43,7 +54,7 @@
         - Internal
             - Controller 노드, Storage 노드와 통신 가능하도록 IP를 설정합니다.
     - SSH 서버 설치 및 root 계정 패스워드 로그인 활성화 (Controller 노드와 동일한 패스워드 설정)
-- Storage 노드 1대
+- Storage 노드
     - NIC
         - Internal
             - Controller 노드, Compute 노드와 통신 가능하도록 IP를 설정합니다.
@@ -147,13 +158,11 @@ enable_infra_configuration = true
 iscsi_server_ip_address = "172.19.0.1"
 iscsi_server_ssh_root_password = "****"
 # iscsi_os_volume_target_name_controller_node="iqn.openstack-controller_terraform.target"
-# iscsi_os_volume_target_name_compute1_node="iqn.openstack-compute1_terraform.target"
-# iscsi_os_volume_target_name_compute2_node="iqn.openstack-compute2_terraform.target"
+# iscsi_os_volume_target_name_compute_node="iqn.openstack-compute_terraform.target"
 iscsi_os_volume_snapshot_name_controller_node = "volmgmt/openstack_controller_no_cloud_init_script@init"
 iscsi_os_volume_snapshot_name_compute_node = "volmgmt/openstack_compute_no_cloud_init_script@init"
 iscsi_os_volume_clone_name_controller_node = "volmgmt/openstack_controller_terraform"
-iscsi_os_volume_clone_name_compute1_node = "volmgmt/openstack_compute1_terraform"
-iscsi_os_volume_clone_name_compute2_node = "volmgmt/openstack_compute2_terraform"
+iscsi_os_volume_clone_name_compute_node = "volmgmt/openstack_compute_terraform"
 iscsi_os_volume_size_controller_node = "100G"
 iscsi_os_volume_size_compute_node = "100G"
 iscsi_os_volume_root_uuid_controller_node = "e3e9e4e9-2093-497d-8837-b92cff8302fa"
@@ -167,18 +176,14 @@ dhcp_tftp_server_exported_folder_location = "/volmgmt/boottp"
 # dhcp_pxe_target_folder_name = "openstack_auto_install_terraform"
 dhcp_nodes_internal_gateway_ip_address = "172.19.0.10"
 dhcp_mac_address_controller_node = "00:00:00:00:00:01"
-dhcp_mac_address_compute1_node = "00:00:00:00:00:02"
-dhcp_mac_address_compute2_node = "00:00:00:00:00:03"
+dhcp_mac_address_compute_node = "00:00:00:00:00:02"
 // IPMI
 ipmi_ip_address_controller_node = "172.31.0.1"
 ipmi_user_name_controller_node = "admin"
 ipmi_user_password_controller_node = "****"
-ipmi_ip_address_compute1_node = "172.31.0.2"
-ipmi_user_name_compute1_node = "admin"
-ipmi_user_password_compute1_node = "****"
-ipmi_ip_address_compute2_node = "172.31.0.3"
-ipmi_user_name_compute2_node = "admin"
-ipmi_user_password_compute2_node = "****"
+ipmi_ip_address_compute_node = "172.31.0.2"
+ipmi_user_name_compute_node = "admin"
+ipmi_user_password_compute_node = "****"
 
 /* Node Settings */
 openstack_nodes_ssh_root_password = "****"
@@ -190,22 +195,14 @@ controller_node_internal_interface = "eno1"
 controller_node_external_ip_address = "192.168.110.191"
 controller_node_external_ip_address_prefix_length = "24"
 controller_node_external_interface = "eno2"
-// compute 1
-compute1_node_hostname = "cp-01"
-compute1_node_internal_ip_address = "172.19.0.112"
-compute1_node_internal_ip_address_prefix_length = "24"
-compute1_node_internal_interface = "eno1"
-compute1_node_external_ip_address = "192.168.110.192"
-compute1_node_external_ip_address_prefix_length = "24"
-compute1_node_external_interface = "eno2"
-// compute 2
-compute2_node_hostname = "cp-02"
-compute2_node_internal_ip_address = "172.19.0.113"
-compute2_node_internal_ip_address_prefix_length = "24"
-compute2_node_internal_interface = "eno1"
-compute2_node_external_ip_address = "192.168.110.193"
-compute2_node_external_ip_address_prefix_length = "24"
-compute2_node_external_interface = "eno2"
+// compute
+compute_node_hostname = "cp-01"
+compute_node_internal_ip_address = "172.19.0.112"
+compute_node_internal_ip_address_prefix_length = "24"
+compute_node_internal_interface = "eno1"
+compute_node_external_ip_address = "192.168.110.192"
+compute_node_external_ip_address_prefix_length = "24"
+compute_node_external_interface = "eno2"
 
 /* OpenStack Settings */
 # openstack_keystone_admin_password = "openstack"
@@ -259,17 +256,11 @@ openstack_nova_compute_instances_nfs_target = "172.29.0.10:/Storage/openstack/in
             
             기본값 : “iqn.openstack-controller_terraform.target”
             
-        - iscsi_os_volume_target_name_compute1_node (옵션)
+        - iscsi_os_volume_target_name_compute_node (옵션)
             
-            Compute 1 노드 iSCSI OS 볼륨 타겟 이름을 설정합니다.
+            Compute 노드 iSCSI OS 볼륨 타겟 이름을 설정합니다.
             
-            기본값 : "iqn.openstack-compute1_terraform.target”
-            
-        - iscsi_os_volume_target_name_compute2_node (옵션)
-            
-            Compute 2 노드 iSCSI OS 볼륨 타겟 이름을 설정합니다.
-            
-            기본값 : "iqn.openstack-compute2_terraform.target”
+            기본값 : "iqn.openstack-compute_terraform.target”
             
         - iscsi_os_volume_snapshot_name_controller_node
             
@@ -289,17 +280,11 @@ openstack_nova_compute_instances_nfs_target = "172.29.0.10:/Storage/openstack/in
             
             예시 : "volmgmt/openstack_controller_terraform”
             
-        - iscsi_os_volume_clone_name_compute1_node
+        - iscsi_os_volume_clone_name_compute_node
             
-            Compute 1 노드 iSCSI OS 볼륨 클론 이름을 설정합니다.
+            Compute 노드 iSCSI OS 볼륨 클론 이름을 설정합니다.
             
-            예시 : "volmgmt/openstack_compute1_terraform”
-            
-        - iscsi_os_volume_clone_name_compute2_node
-            
-            Compute 2 노드 iSCSI OS 볼륨 클론 이름을 설정합니다.
-            
-            예시 : "volmgmt/openstack_compute2_terraform”
+            예시 : "volmgmt/openstack_compute_terraform”
             
         - iscsi_os_volume_size_controller_node
             
@@ -370,18 +355,12 @@ openstack_nova_compute_instances_nfs_target = "172.29.0.10:/Storage/openstack/in
             
             예시 : “00:00:00:00:00:01”
             
-        - dhcp_mac_address_compute1_node
+        - dhcp_mac_address_compute_node
             
-            Compute 1 노드의 MAC 주소를 설정합니다.
+            Compute 노드의 MAC 주소를 설정합니다.
             
             예시 : “00:00:00:00:00:02”
-
-         - dhcp_mac_address_compute2_node
             
-            Compute 2 노드의 MAC 주소를 설정합니다.
-            
-            예시 : “00:00:00:00:00:03”
-
     - IPMI
         - ipmi_ip_address_controller_node
             
@@ -399,38 +378,22 @@ openstack_nova_compute_instances_nfs_target = "172.29.0.10:/Storage/openstack/in
             
             Controller 노드 IPMI 사용자 암호를 설정합니다.
             
-        - ipmi_ip_address_compute1_node
+        - ipmi_ip_address_compute_node
             
-            Compute 1 노드 IPMI IP 주소를 설정합니다.
+            Compute 노드 IPMI IP 주소를 설정합니다.
             
             예시 : “172.31.0.2”
             
-        - ipmi_user_name_compute1_node
+        - ipmi_user_name_compute_node
             
-            Compute 1 노드 IPMI 사용자명을 설정합니다.
-            
-            예시 : “admin”
-            
-        - ipmi_user_password_compute1_node
-            
-            Compute 1 노드 IPMI 사용자 암호를 설정합니다.
-
-        - ipmi_ip_address_compute2_node
-            
-            Compute 2 노드 IPMI IP 주소를 설정합니다.
-            
-            예시 : “172.31.0.3”
-            
-        - ipmi_user_name_compute2_node
-            
-            Compute 2 노드 IPMI 사용자명을 설정합니다.
+            Compute 노드 IPMI 사용자명을 설정합니다.
             
             예시 : “admin”
             
-        - ipmi_user_password_compute2_node
+        - ipmi_user_password_compute_node
             
-            Compute 2 노드 IPMI 사용자 암호를 설정합니다.
-
+            Compute 노드 IPMI 사용자 암호를 설정합니다.
+            
 - 공통
     - openstack_nodes_ssh_root_password
         
@@ -479,92 +442,49 @@ openstack_nova_compute_instances_nfs_target = "172.29.0.10:/Storage/openstack/in
         
         예시 : “eno2”
         
-- Compute 1 노드 관련 설정
-    - compute1_node_hostname
+- Compute 노드 관련 설정
+    - compute_node_hostname
         
-        Compute 1 노드의 호스트 명을 설정합니다.
+        Compute 노드의 호스트 명을 설정합니다.
         
         예시 : "cp-01"
         
-    - compute1_node_internal_ip_address
+    - compute_node_internal_ip_address
         
-        Compute 1 노드의 내부 인터페이스에 사용할 IP 주소를 설정합니다.
+        Compute 노드의 내부 인터페이스에 사용할 IP 주소를 설정합니다.
         
         예시 : "172.19.0.112"
         
-    - compute1_node_internal_ip_address_prefix_length
+    - compute_node_internal_ip_address_prefix_length
         
-        Compute 1 노드의 내부 인터페이스에 사용할 IP 주소의 Prefix 길이를 설정합니다.
+        Compute 노드의 내부 인터페이스에 사용할 IP 주소의 Prefix 길이를 설정합니다.
         
         예시 : "24"
         
-    - compute1_node_internal_interface
+    - compute_node_internal_interface
         
-        Compute 1 노드의 내부 인터페이스명을 설정합니다.
+        Compute 노드의 내부 인터페이스명을 설정합니다.
         
         예시 : "eno1"
         
-    - compute1_node_external_ip_address
+    - compute_node_external_ip_address
         
-        Compute 1 노드의 외부 인터페이스에 사용할  IP 주소를 설정합니다.
+        Compute 노드의 외부 인터페이스에 사용할  IP 주소를 설정합니다.
         
         예시 : "192.168.110.192"
         
-    - compute1_node_external_ip_address_prefix_length
+    - compute_node_external_ip_address_prefix_length
         
-        Compute 1 노드의 외부 인터페이스에 사용할 IP 주소의 Prefix 길이를 설정합니다.
+        Compute 노드의 외부 인터페이스에 사용할 IP 주소의 Prefix 길이를 설정합니다.
         
         예시 : "24"
         
-    - compute1_node_external_interface
+    - compute_node_external_interface
         
-        Compute 1 노드의 외부 인터페이스명을 설정합니다.
+        Compute 노드의 외부 인터페이스명을 설정합니다.
         
         예시 : "eno2"
-
-- Compute 2 노드 관련 설정
-    - compute2_node_hostname
         
-        Compute 2 노드의 호스트 명을 설정합니다.
-        
-        예시 : "cp-02"
-        
-    - compute2_node_internal_ip_address
-        
-        Compute 2 노드의 내부 인터페이스에 사용할 IP 주소를 설정합니다.
-        
-        예시 : "172.19.0.113"
-        
-    - compute2_node_internal_ip_address_prefix_length
-        
-        Compute 2 노드의 내부 인터페이스에 사용할 IP 주소의 Prefix 길이를 설정합니다.
-        
-        예시 : "24"
-        
-    - compute2_node_internal_interface
-        
-        Compute 2 노드의 내부 인터페이스명을 설정합니다.
-        
-        예시 : "eno1"
-        
-    - compute2_node_external_ip_address
-        
-        Compute 2 노드의 외부 인터페이스에 사용할  IP 주소를 설정합니다.
-        
-        예시 : "192.168.110.193"
-        
-    - compute2_node_external_ip_address_prefix_length
-        
-        Compute 2 노드의 외부 인터페이스에 사용할 IP 주소의 Prefix 길이를 설정합니다.
-        
-        예시 : "24"
-        
-    - compute2_node_external_interface
-        
-        Compute 2 노드의 외부 인터페이스명을 설정합니다.
-        
-        예시 : "eno2"
-
 - OpenStack
     - openstack_keystone_admin_password
         - admin 계정으로 로그인시 사용할 암호를 설정합니다.
@@ -672,4 +592,87 @@ Terraform 설치 스크립트를 실행하면서 저장된 State를 초기화 �
 
 ```bash
 ./clean_terraform_states.sh
+```
+
+# 이슈
+
+## 1. 인스턴스 생성시 Timeout 초과되어 인스턴스 생성 에러가 발생하는 문제
+
+- Compute Node에 SSH 접속한 후 아래 파일을 수정한다.
+
+vi /etc/kolla/nova-compute/nova.conf
+
+```bash
+## [DEFAULT] 섹션에 아래 2 옵션을 추가한다.
+## 아래 설정은 Block이 매핑되기까지 1800초 (30분)을 대기하고 실패 시 6번을 retry 한다는 설정이다.
+block_device_allocate_retries = 1800
+block_device_allocate_retries_interval = 6
+```
+
+- 수정후 nova-compute 컨테이너를 재시작 한다.
+
+## 2. ipmitool 사용가능하도록 authtype 설정
+
+ipmitool을 사용가능 하도록 하려는 장비에 접속하여 다음과 같이 실행한다.
+
+```bash
+apt install -y ipmitool
+
+ipmitool lan set {IPMI lan channel} auth ADMIN MD5,PASSWORD
+# 예시
+# ipmitool lan set 3 auth ADMIN MD5,PASSWORD
+```
+
+이제 다른 호스트에서 IPMI를 제어하고자 하는 서버를 원격으로 다음과 같이 사용할 수 있다. 아래는 Power 상태를 보는 예시이다.
+
+```bash
+ipmitool -A PASSWORD -U admin -P '****' -I lan -H 172.31.0.3 power status
+Chassis Power is on
+```
+
+## 3. Kolla Ansible 설치 과정중 OVN 관련 컨테이너가 설정되면 외부 인터페이스의 연결이 끊어지는 문제
+
+ Kolla Ansible 설치를 진행할 때는 컨테이너 이미지들을 미리 모두 Pull 하도록 하고 난 후 내부 인터페이스를 통해 SSH 접속을 하여 설치를 진행한다.
+
+## 4. Network Manager가 설치되어 있는 경우 네트워크 설정에 충돌이 발생하는 문제
+
+ OpenStack에서 네트워크 설정을 하려고 하면 Network Manager는 네트워크 상태가 변경될 경우 기존에 설정된 값으로 네트워크를 재설정 하려고 하기 때문에 둘 간의 충돌이 발생하게 됨.
+
+- 시도한 방법
+    
+     netplan YAML 파일에서 인터페이스 별로 renderer 설정이 가능하다. systemd 에서 제어하게 할 인터페이스는 networkd renderer를 사용하게 하고, Network Manager 에서 제어하게 할 인터페이스는 renderer에 Netwok Manager를 써주면 된다.
+    
+    - 예시
+        
+        ```bash
+        network:
+          version: 2
+          ethernets:
+            eno1:
+              renderer: networkd
+              addresses:
+              - 10.0.0.100/24
+            eno2:
+              renderer: NetworkManager
+              addresses:
+              - 192.168.110.100/24
+              gateway4: 192.168.110.254
+              nameservers:
+                addresses:
+                - 1.1.1.1
+                - 1.0.0.1
+                search: []
+        ```
+        
+    
+     하지만 여전히 Network Manager에 연결 프로파일이 남아 있는 경우 경우에 따라 해당 프로파일에 설정된 값들로 인터페이스가 설정되는 경우가 발생한다.
+    
+
+ 
+
+따라서, OpenStack 설치시에는 network-manager 패키지를 삭제해 주는 것이 권장된다.
+
+```bash
+sudo apt purge network-manager
+sudo apt purge --auto-remove
 ```
