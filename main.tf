@@ -2501,11 +2501,12 @@ resource "null_resource" "post_install_create_flavors" {
             "#!/bin/bash",
             ". /etc/kolla/admin-openrc.sh",
             "echo \"[*] Creating OpenStack flavors...\"",
-            "openstack flavor create m1.tiny --id m1.tiny --ram 1024 --disk 10 --vcpus 1",
-            "openstack flavor create m1.small --id m1.small --ram 2048 --disk 20 --vcpus 1",
-            "openstack flavor create m1.medium --id m1.medium --ram 4096 --disk 40 --vcpus 2",
-            "openstack flavor create m1.large --id m1.large --ram 8192 --disk 80 --vcpus 4",
-            "openstack flavor create m1.xlarge --id m1.xlarge --ram 16384 --disk 160 --vcpus 8"
+            "openstack flavor create tiny --id tiny --ram 1024 --disk 10 --vcpus 1",
+            "openstack flavor create small --id small --ram 4096 --disk 40 --vcpus 2",
+            "openstack flavor create medium --id medium --ram 8192 --disk 60 --vcpus 4",
+            "openstack flavor create large --id large --ram 16384 --disk 80 --vcpus 8",
+            "openstack flavor create xlarge --id xlarge --ram 32768 --disk 100 --vcpus 16",
+            "openstack flavor create superlarge --id superlarge --ram 65536 --disk 120 --vcpus 32"
         ]
     }
 }
